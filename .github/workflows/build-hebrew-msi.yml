@@ -41,7 +41,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          key: hebrew-msi-x64-v0182
+          key: hebrew-msi-x64
 
       - name: Install WiX
         uses: storytold/craft-common-actions/actions/install-wix@main
