@@ -1,0 +1,115 @@
+name: Build PdfCraft v0.19.0 Hebrew PRs Windows MSI
+
+on:
+  push:
+    branches:
+      - 'release/v0.19.0-hebrew-prs'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hebrew-prs-msi-v0190
+  cancel-in-progress: false
+
+jobs:
+  windows-msi:
+    name: Integrate PRs and build Windows x64 MSI
+    runs-on: windows-latest
+    timeout-minutes: 100
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: 0
+      RUST_BACKTRACE: 1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Apply PR #5655 and #5656 to the official v0.19.0 source
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          workflow_file="$RUNNER_TEMP/build-hebrew-prs.yml"
+          cp .github/workflows/build-hebrew-prs-msi.yml "$workflow_file"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git fetch https://github.com/storytold/pdfcraft.git 5644d56c64af1529b0f9012874886fcad855c257
+          git fetch https://github.com/shneyni/pdfcraft.git 3fde5130ca45614be7540ee4d7e1d1097a5266d7
+          git fetch https://github.com/shneyni/pdfcraft.git 1613d5453af59ab6820c86020667245d344ccb0a
+
+          upstream_base=5644d56c64af1529b0f9012874886fcad855c257
+          hebrew_head=3fde5130ca45614be7540ee4d7e1d1097a5266d7
+          booklet_head=1613d5453af59ab6820c86020667245d344ccb0a
+          release_tag=8c572792d6760bdc903d6f9a032e3e38e8f71cb8
+
+          git checkout --detach "$release_tag"
+          git switch -c integration/v0.19.0-hebrew-prs
+
+          mkdir -p .github/workflows
+          cp "$workflow_file" .github/workflows/build-hebrew-prs-msi.yml
+          git add .github/workflows/build-hebrew-prs-msi.yml
+
+          git diff --binary "$upstream_base" "$hebrew_head" > "$RUNNER_TEMP/pr-5655.patch"
+          git apply --3way --index "$RUNNER_TEMP/pr-5655.patch"
+
+          git diff --binary "$upstream_base" "$booklet_head" > "$RUNNER_TEMP/pr-5656.patch"
+          git apply --3way --index "$RUNNER_TEMP/pr-5656.patch"
+
+          if [[ -n "$(git diff --name-only --diff-filter=U)" ]]; then
+            echo "::error::PR changes conflict with the official v0.19.0 tag."
+            git status --short
+            git diff --name-only --diff-filter=U
+            exit 1
+          fi
+
+          grep -q '^version = "0.19.0"$' Cargo.toml
+          if grep -R --include='Cargo.toml' --include='Cargo.lock' -n '0.19.1' .; then
+            echo "::error::Unexpected 0.19.1 version remains in the official v0.19.0 source."
+            exit 1
+          fi
+
+          git add -A
+          git commit -m "Apply Hebrew and booklet persistence PRs to official v0.19.0"
+          git push origin HEAD:refs/heads/"$GITHUB_REF_NAME"
+
+      - name: Check out pinned craft-fonts
+        uses: storytold/craft-common-actions/actions/checkout-craft-fonts@main
+        with:
+          ref: b076417b5880bd4154bd22f00695b1d28c6bea83
+
+      - name: Check out craft-i18n
+        uses: storytold/craft-common-actions/actions/checkout-craft-i18n@main
+
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: stable
+          targets: x86_64-pc-windows-msvc
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: hebrew-prs-v0190-x64
+
+      - name: Install WiX
+        uses: storytold/craft-common-actions/actions/install-wix@main
+        with:
+          wix-version: 5.0.2
+
+      - name: Build and package MSI
+        shell: pwsh
+        env:
+          PDFCRAFT_BUILD_SHA: ${{ github.sha }}
+          CRAFT_FONTS_DIR: ${{ github.workspace }}/craft-fonts
+          CRAFT_FONTS_REQUIRED: "1"
+        run: ./packaging/windows/package.ps1 -Arch x64
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: PdfCraft-Hebrew-PRs-v0.19.0-x64-MSI
+          path: dist/release/*.msi
+          if-no-files-found: error
+          retention-days: 14
