@@ -28,6 +28,7 @@ jobs:
           fetch-depth: 0
 
       - name: Apply PR #5655 and #5656 to the official v0.19.0 source
+        id: apply_pr
         shell: bash
         run: |
           set -euo pipefail
@@ -68,14 +69,15 @@ jobs:
           fi
 
           grep -q '^version = "0.19.0"$' Cargo.toml
-          if grep -R --include='Cargo.toml' --include='Cargo.lock' -n '0.19.1' .; then
-            echo "::error::Unexpected 0.19.1 version remains in the official v0.19.0 source."
+          if grep -F -n 'version = "0.19.1"' Cargo.toml Cargo.lock; then
+            echo "::error::Unexpected 0.19.1 package version remains in the official v0.19.0 Cargo files."
             exit 1
           fi
 
           git add -A
           git commit -m "Apply Hebrew and booklet persistence PRs to official v0.19.0"
           git push origin HEAD:refs/heads/"$GITHUB_REF_NAME"
+          echo "build_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Check out pinned craft-fonts
         uses: storytold/craft-common-actions/actions/checkout-craft-fonts@main
@@ -102,7 +104,7 @@ jobs:
       - name: Build and package MSI
         shell: pwsh
         env:
-          PDFCRAFT_BUILD_SHA: ${{ github.sha }}
+          PDFCRAFT_BUILD_SHA: ${{ steps.apply_pr.outputs.build_sha }}
           CRAFT_FONTS_DIR: ${{ github.workspace }}/craft-fonts
           CRAFT_FONTS_REQUIRED: "1"
         run: ./packaging/windows/package.ps1 -Arch x64
