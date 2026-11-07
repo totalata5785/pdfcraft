@@ -75,9 +75,11 @@ jobs:
           fi
 
           git add -A
-          git commit -m "Apply Hebrew and booklet persistence PRs to official v0.19.0"
-          git push origin HEAD:refs/heads/"$GITHUB_REF_NAME"
-          echo "build_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          tree_sha=$(git write-tree)
+          commit_sha=$(printf '%s\n' "Apply Hebrew and booklet persistence PRs to official v0.19.0" | git commit-tree "$tree_sha" -p "$GITHUB_SHA")
+          git push origin "$commit_sha:refs/heads/$GITHUB_REF_NAME"
+          git reset --hard "$commit_sha"
+          echo "build_sha=$commit_sha" >> "$GITHUB_OUTPUT"
 
       - name: Check out pinned craft-fonts
         uses: storytold/craft-common-actions/actions/checkout-craft-fonts@main
