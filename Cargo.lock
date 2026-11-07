@@ -4237,7 +4237,7 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft"
-version = "0.18.1"
+version = "0.19.1"
 dependencies = [
  "chrono",
  "craft-update",
